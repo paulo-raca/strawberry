@@ -72,6 +72,7 @@ UUID = scalar(
 def _verify_void(x) -> None:
     if x is not None:
         raise ValueError(f"Expected 'None', got '{x}'")
+    return None
 
 
 Void = scalar(
