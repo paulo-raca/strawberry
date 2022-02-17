@@ -420,6 +420,9 @@ class GraphQLCoreConverter:
             return GraphQLNonNull(self.from_type(type_))
 
     def from_type(self, type_: Union[StrawberryType, type]) -> GraphQLNullableType:
+        if type_ is None:  # None is often used instead of NoneType in typing
+            type_ = type(None)
+
         if compat.is_generic(type_):
             raise MissingTypesForGenericError(type_)
 
