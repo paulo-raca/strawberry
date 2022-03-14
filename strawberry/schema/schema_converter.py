@@ -157,7 +157,10 @@ class GraphQLCoreConverter:
             subscribe=subscribe,
             description=field.description,
             deprecation_reason=field.deprecation_reason,
-            extensions={"python_name": field.python_name},
+            extensions={
+                "python_name": field.python_name,
+                "has_resolver": field.base_resolver is not None,
+            },
         )
 
     def from_input_field(self, field: StrawberryField) -> GraphQLInputField:
@@ -174,6 +177,10 @@ class GraphQLCoreConverter:
             default_value=default_value,
             description=field.description,
             deprecation_reason=field.deprecation_reason,
+            extensions={
+                "python_name": field.python_name,
+                "has_resolver": False,
+            },
         )
 
     FieldType = TypeVar("FieldType", GraphQLField, GraphQLInputField)
