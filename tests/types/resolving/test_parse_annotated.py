@@ -7,21 +7,25 @@ from strawberry.annotation import StrawberryAnnotation
 
 def test_parse_annotated():
     assert StrawberryAnnotation.parse_annotated(str) == str
-    assert StrawberryAnnotation.parse_annotated(Annotated[str, "foo"]) == str
+    assert (
+        StrawberryAnnotation.parse_annotated(Annotated[str, "foo"])
+        == Annotated[str, "foo"]
+    )
 
 
 def test_parse_annotated_optional():
     assert StrawberryAnnotation.parse_annotated(Optional[str]) == Optional[str]
     assert (
         StrawberryAnnotation.parse_annotated(Annotated[Optional[str], "foo"])
-        == Optional[str]
+        == Annotated[Optional[str], "foo"]
     )
 
 
 def test_parse_annotated_list():
     assert StrawberryAnnotation.parse_annotated(List[str]) == List[str]
     assert (
-        StrawberryAnnotation.parse_annotated(Annotated[List[str], "foo"]) == List[str]
+        StrawberryAnnotation.parse_annotated(Annotated[List[str], "foo"])
+        == Annotated[List[str], "foo"]
     )
 
 
@@ -29,7 +33,7 @@ def test_parse_annotated_union():
     assert StrawberryAnnotation.parse_annotated(Union[str, int]) == Union[str, int]
     assert (
         StrawberryAnnotation.parse_annotated(Annotated[Union[str, int], "foo"])
-        == Union[str, int]
+        == Annotated[Union[str, int], "foo"]
     )
 
 
@@ -42,7 +46,7 @@ def test_parse_annotated_optional_union():
         StrawberryAnnotation.parse_annotated(
             Annotated[Optional[Union[str, int]], "foo"]
         )
-        == Optional[Union[str, int]]
+        == Annotated[Optional[Union[str, int]], "foo"]
     )
 
 
@@ -53,7 +57,7 @@ def test_parse_annotated_list_union():
     )
     assert (
         StrawberryAnnotation.parse_annotated(Annotated[List[Union[str, int]], "foo"])
-        == List[Union[str, int]]
+        == Annotated[List[Union[str, int]], "foo"]
     )
 
 
@@ -62,5 +66,5 @@ def test_parse_annotated_recursive():
         StrawberryAnnotation.parse_annotated(
             Annotated[List[Annotated[Union[str, int], "bar"]], "foo"]
         )
-        == List[Union[str, int]]
+        == Annotated[List[Annotated[Union[str, int], "bar"]], "foo"]
     )

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import typing
 from collections import abc
@@ -8,6 +10,7 @@ from typing import (  # type: ignore[attr-defined]
     Dict,
     List,
     Optional,
+    Sequence,
     TypeVar,
     Union,
     _eval_type,
@@ -16,7 +19,6 @@ from typing import (  # type: ignore[attr-defined]
 from typing_extensions import Annotated, get_args, get_origin
 
 from strawberry.exceptions import StrawberryException
-from strawberry.private import is_private
 
 
 try:
@@ -29,6 +31,7 @@ from strawberry.custom_scalar import ScalarDefinition
 from strawberry.enum import EnumDefinition
 from strawberry.lazy_type import LazyType, StrawberryLazyReference
 from strawberry.type import (
+    StrawberryAnnotated,
     StrawberryList,
     StrawberryOptional,
     StrawberryType,
@@ -61,32 +64,35 @@ class StrawberryAnnotation:
         self.annotation = annotation
         self.namespace = namespace
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, StrawberryAnnotation):
-            return NotImplemented
+    def __hash__(self) -> int:
+        return hash(self.resolve())
 
-        return self.resolve() == other.resolve()
+    def __eq__(self, other: object) -> bool:
+        return self.resolve() == other
 
     @staticmethod
     def parse_annotated(annotation: object) -> object:
-        from strawberry.auto import StrawberryAuto
-
         annotation_origin = get_origin(annotation)
 
         if annotation_origin is Annotated:
-            annotated_args = get_args(annotation)
-            annotation_type = annotated_args[0]
+            args = get_args(annotation)
+            base_type = args[0]
+            annotated_args: Sequence[Any] = args[1:]
 
-            for arg in annotated_args[1:]:
+            for arg in annotated_args:
                 if isinstance(arg, StrawberryLazyReference):
-                    assert isinstance(annotation_type, ForwardRef)
+                    assert isinstance(base_type, ForwardRef)
+                    base_type = arg.resolve_forward_ref(base_type)
+                    annotated_args = [
+                        arg
+                        for arg in annotated_args
+                        if not isinstance(arg, StrawberryLazyReference)
+                    ]
 
-                    return arg.resolve_forward_ref(annotation_type)
-
-                if isinstance(arg, StrawberryAuto):
-                    return arg
-
-            return StrawberryAnnotation.parse_annotated(annotation_type)
+            base_type = StrawberryAnnotation.parse_annotated(base_type)
+            if annotated_args:
+                base_type = Annotated[(base_type, *annotated_args)]
+            return base_type
 
         elif is_union(annotation):
             return Union[
@@ -116,38 +122,43 @@ class StrawberryAnnotation:
 
         evaled_type = _eval_type(annotation, self.namespace, None)
 
-        if is_private(evaled_type):
-            return evaled_type
+        evaled_type, evaled_args = StrawberryAnnotated.get_type_and_args(evaled_type)
+
         if self._is_async_type(evaled_type):
             evaled_type = self._strip_async_type(evaled_type)
+
         if self._is_lazy_type(evaled_type):
-            return evaled_type
+            ret = evaled_type
 
-        if self._is_generic(evaled_type):
+        elif self._is_generic(evaled_type):
             if any(is_type_var(type_) for type_ in evaled_type.__args__):
-                return evaled_type
-            return self.create_concrete_type(evaled_type)
-
+                ret = evaled_type
+            else:
+                ret = self.create_concrete_type(evaled_type)
         # Simply return objects that are already StrawberryTypes
-        if self._is_strawberry_type(evaled_type):
-            return evaled_type
+        elif self._is_strawberry_type(evaled_type):
+            ret = evaled_type
 
         # Everything remaining should be a raw annotation that needs to be turned into
         # a StrawberryType
-        if self._is_enum(evaled_type):
-            return self.create_enum(evaled_type)
-        if self._is_list(evaled_type):
-            return self.create_list(evaled_type)
+        elif self._is_enum(evaled_type):
+            ret = self.create_enum(evaled_type)
+        elif self._is_list(evaled_type):
+            ret = self.create_list(evaled_type)
         elif self._is_optional(evaled_type):
-            return self.create_optional(evaled_type)
+            ret = self.create_optional(evaled_type)
         elif self._is_union(evaled_type):
-            return self.create_union(evaled_type)
+            ret = self.create_union(evaled_type)
         elif is_type_var(evaled_type):
-            return self.create_type_var(evaled_type)
+            ret = self.create_type_var(evaled_type)
+        else:
+            # TODO: Raise exception now, or later?
+            # ... raise NotImplementedError(f"Unknown type {evaled_type}")
+            ret = evaled_type
 
-        # TODO: Raise exception now, or later?
-        # ... raise NotImplementedError(f"Unknown type {evaled_type}")
-        return evaled_type
+        if evaled_args:
+            ret = StrawberryAnnotated(ret, *evaled_args)
+        return ret
 
     def create_concrete_type(self, evaled_type: type) -> type:
         if _is_object_type(evaled_type):
@@ -197,7 +208,7 @@ class StrawberryAnnotation:
     def create_type_var(self, evaled_type: TypeVar) -> StrawberryTypeVar:
         return StrawberryTypeVar(evaled_type)
 
-    def create_union(self, evaled_type) -> "StrawberryUnion":
+    def create_union(self, evaled_type) -> StrawberryUnion:
         # Prevent import cycles
         from strawberry.union import StrawberryUnion
 
