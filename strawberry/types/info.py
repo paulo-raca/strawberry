@@ -83,12 +83,16 @@ class Info(Generic[ContextType, RootValueType]):
 
 
 # Stores the info for the current resolver
-current_info: ContextVar[Info] = ContextVar("current_info")
+current_info: ContextVar[Optional[Info]] = ContextVar("current_info")
 
 
-def get_info() -> Info:
+def get_info() -> Optional[Info]:
     return current_info.get()
 
 
-def get_context() -> ContextType:
-    return current_info.get().context
+def get_context() -> Optional[ContextType]:
+    info = current_info.get()
+    if info is not None:
+        return info.context
+    else:
+        return None
